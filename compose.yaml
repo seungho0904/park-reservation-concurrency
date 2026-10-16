@@ -1,0 +1,62 @@
+services:
+  db:
+    image: postgres:18
+    environment:
+      POSTGRES_USER: park
+      POSTGRES_PASSWORD: park
+      POSTGRES_DB: park
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - park-data:/var/lib/postgresql
+      - ./database/schema.sql:/docker-entrypoint-initdb.d/001-schema.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U park -d park"]
+      interval: 2s
+      timeout: 3s
+      retries: 20
+
+  api:
+    build: .
+    environment:
+      DATABASE_URL: postgresql://park:park@db:5432/park
+    ports:
+      - "127.0.0.1:8000:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health', timeout=2)"]
+      interval: 2s
+      timeout: 3s
+      retries: 20
+
+  test-db:
+    image: postgres:18
+    profiles: [test]
+    environment:
+      POSTGRES_USER: park
+      POSTGRES_PASSWORD: park
+      POSTGRES_DB: park_test
+    ports:
+      - "127.0.0.1:5433:5432"
+    tmpfs:
+      - /var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U park -d park_test"]
+      interval: 2s
+      timeout: 3s
+      retries: 20
+
+  tests:
+    build: .
+    profiles: [test]
+    environment:
+      TEST_DATABASE_URL: postgresql://park:park@test-db:5432/park_test
+    command: ["pytest", "-q"]
+    depends_on:
+      test-db:
+        condition: service_healthy
+
+volumes:
+  park-data:

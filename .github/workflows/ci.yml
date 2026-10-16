@@ -1,0 +1,52 @@
+name: Docker Compose CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  docker-compose:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      COMPOSE_PROJECT_NAME: park-ci
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Validate Compose configuration
+        run: docker compose config --quiet
+
+      - name: Build application and test containers
+        run: docker compose --profile test build api tests
+
+      - name: Start PostgreSQL and wait for API readiness
+        run: docker compose up -d --wait --wait-timeout 90 db api
+
+      - name: Check Python style
+        run: |
+          docker compose exec -T api ruff check app tests scripts
+          docker compose exec -T api ruff format --check app tests scripts
+
+      - name: Run PostgreSQL integration tests
+        run: docker compose --profile test run --rm tests
+
+      - name: Seed demonstration data
+        run: docker compose exec -T api python -m app.seed
+
+      - name: Verify live HTTP booking concurrency
+        run: docker compose exec -T -e SMOKE_TEST=1 api python -m scripts.smoke_test
+
+      - name: Show container logs on failure
+        if: failure()
+        run: docker compose --profile test logs --no-color
+
+      - name: Clean up isolated CI containers
+        if: always()
+        run: docker compose --profile test down --volumes --remove-orphans
