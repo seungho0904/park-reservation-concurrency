@@ -3,22 +3,42 @@ from typing import Annotated
 
 import psycopg
 from fastapi import Depends, FastAPI, HTTPException, Path, Query
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import JSONResponse
 
 from app.db import get_connection
+from app.registration import register_user
 from app.reservations import RESERVATION_DETAILS, create_reservation
-from app.schemas import ReservationCreate, ReservationOut, SlotOut
+from app.schemas import ReservationCreate, ReservationOut, SlotOut, UserOut, UserRegister
 
 app = FastAPI(
     title="Park Reservation Concurrency Lab",
     description=(
         "Learning MVP: one vehicle per booking, at most one booking per user/park/local date. "
-        "User IDs are demonstration identities, not authenticated users. "
+        "Registration stores password hashes, but login and booking authorization are not yet "
+        "implemented. Booking requests still supply their own user IDs. "
         "Slot times use the park's local timezone."
     ),
 )
 
 Database = Annotated[psycopg.Connection, Depends(get_connection)]
 ResourceId = Annotated[int, Path(gt=0, le=9223372036854775807)]
+
+
+@app.exception_handler(RequestValidationError)
+async def validation_error_handler(_request, exc: RequestValidationError):
+    # FastAPI's default validation response can echo raw input, including passwords.
+    # Return only locations and error descriptions; never the request body or context.
+    errors = [
+        {key: error[key] for key in ("type", "loc", "msg") if key in error}
+        for error in exc.errors()
+    ]
+    return JSONResponse(status_code=422, content={"detail": errors})
+
+
+@app.post("/auth/register", response_model=UserOut, status_code=201)
+def register(request: UserRegister, connection: Database):
+    return register_user(connection, request)
 
 
 @app.get("/health")

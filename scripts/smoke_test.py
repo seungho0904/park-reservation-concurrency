@@ -33,6 +33,15 @@ def main() -> None:
     with connect() as connection:
         if connection.execute("SELECT count(*) AS total FROM reservations").fetchone()["total"]:
             raise RuntimeError("The smoke test requires a database with no reservations.")
+        registration = {
+            "username": "smoke_visitor",
+            "display_name": "Smoke Visitor",
+            "password": "Disposable smoke test password!",
+        }
+        status, user = request("/auth/register", registration)
+        assert status == 201 and set(user) == {"id", "username", "display_name"}, user
+        status, duplicate_user = request("/auth/register", registration)
+        assert status == 409 and duplicate_user["detail"]["code"] == "username_taken"
         slots = connection.execute(
             "SELECT * FROM reservation_slots WHERE park_id = 1 ORDER BY visit_date, starts_at"
         ).fetchall()
@@ -95,6 +104,7 @@ def main() -> None:
 
     print("Live HTTP smoke test passed: 1 created, 19 sold out, 1 stored reservation.")
     print("Verified availability, reservation list, and duplicate daily booking rejection.")
+    print("Verified registration and duplicate username rejection without returning credentials.")
 
 
 if __name__ == "__main__":
