@@ -51,6 +51,7 @@ def database(monkeypatch):
             connection.execute(
                 "SELECT setval(pg_get_serial_sequence('reservation_slots', 'id'), 4)"
             )
+            connection.execute("SELECT setval(pg_get_serial_sequence('users', 'id'), 25)")
             yield connection
     finally:
         # Only this test's newly created schema is removed.

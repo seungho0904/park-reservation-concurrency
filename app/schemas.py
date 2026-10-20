@@ -1,9 +1,32 @@
 from datetime import date, datetime, time
 from typing import Annotated
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, SecretStr, field_validator
 
 PositiveId = Annotated[int, Field(strict=True, gt=0, le=9223372036854775807)]
+
+
+class UserRegister(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    username: Annotated[str, Field(strict=True, pattern=r"^[a-z][a-z0-9_]{2,31}$")]
+    display_name: Annotated[str, Field(strict=True, min_length=1, max_length=100)]
+    password: Annotated[SecretStr, Field(min_length=15, max_length=128)]
+
+    @field_validator("username", "display_name", mode="before")
+    @classmethod
+    def normalize_names(cls, value, info):
+        if isinstance(value, str):
+            value = value.strip()
+            if info.field_name == "username":
+                value = value.lower()
+        return value
+
+
+class UserOut(BaseModel):
+    id: int
+    username: str
+    display_name: str
 
 
 class ReservationCreate(BaseModel):
